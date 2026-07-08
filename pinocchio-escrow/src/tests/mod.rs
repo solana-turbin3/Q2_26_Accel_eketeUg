@@ -80,6 +80,7 @@ mod tests {
         setup_make_with_discriminator(0, amount_to_receive, amount_to_give, mint_amount)
     }
 
+    #[allow(dead_code)]
     fn setup_make_v2(amount_to_receive: u64, amount_to_give: u64, mint_amount: u64) -> EscrowSetup {
         setup_make_with_discriminator(3, amount_to_receive, amount_to_give, mint_amount)
     }
@@ -181,5 +182,133 @@ mod tests {
         assert_eq!(maker_balance, 1_000_000_000 - s.amount_to_give);
 
         println!("test_make passed");
+    }
+
+    #[test]
+    fn test_refund() {
+        let mut s = setup_make(100_000_000, 500_000_000, 1_000_000_000);
+
+        // Refund instruction accounts:
+        // 0. maker [signer, writable]
+        // 1. mint_a [readable]
+        // 2. escrow_account [writable]
+        // 3. maker_ata [writable]
+        // 4. escrow_ata [writable, token vault]
+        // 5. system_program [readable]
+        // 6. token_program [readable]
+        let ix = Instruction {
+            program_id: program_id(),
+            accounts: vec![
+                AccountMeta::new(s.maker.pubkey(), true),
+                AccountMeta::new(s.mint_a, false),
+                AccountMeta::new(s.escrow, false),
+                AccountMeta::new(s.maker_ata_a, false),
+                AccountMeta::new(s.vault, false),
+                AccountMeta::new_readonly(system_program(), false),
+                AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false),
+            ],
+            data: vec![2], // Refund discriminator
+        };
+
+        let msg = Message::new(&[ix], Some(&s.maker.pubkey()));
+        let blockhash = s.svm.latest_blockhash();
+        let tx = Transaction::new(&[&s.maker], msg, blockhash);
+        let meta = s.svm.send_transaction(tx).expect("Refund instruction failed");
+        println!("Refund CU: {}", meta.compute_units_consumed);
+
+        // Verify maker got their tokens back
+        let maker_balance = read_token_balance(&s.svm, &s.maker_ata_a);
+        assert_eq!(maker_balance, 1_000_000_000);
+
+        // Verify escrow and vault accounts are closed (i.e. do not exist)
+        assert!(s.svm.get_account(&s.escrow).is_none());
+        assert!(s.svm.get_account(&s.vault).is_none());
+
+        println!("test_refund passed");
+    }
+
+    #[test]
+    fn test_take() {
+        let mut s = setup_make(100_000_000, 500_000_000, 1_000_000_000);
+
+        let taker = Keypair::new();
+        s.svm.airdrop(&taker.pubkey(), 10 * LAMPORTS_PER_SOL)
+            .expect("Airdrop failed");
+
+        // Create taker ATAs
+        let taker_ata_a = CreateAssociatedTokenAccount::new(&mut s.svm, &s.maker, &s.mint_a)
+            .owner(&taker.pubkey())
+            .send()
+            .unwrap();
+
+        let taker_ata_b = CreateAssociatedTokenAccount::new(&mut s.svm, &s.maker, &s.mint_b)
+            .owner(&taker.pubkey())
+            .send()
+            .unwrap();
+
+        // Create maker ATA for mint_b
+        let maker_ata_b = CreateAssociatedTokenAccount::new(&mut s.svm, &s.maker, &s.mint_b)
+            .owner(&s.maker.pubkey())
+            .send()
+            .unwrap();
+
+        // Mint Token B to taker
+        MintTo::new(&mut s.svm, &s.maker, &s.mint_b, &taker_ata_b, 200_000_000)
+            .send()
+            .unwrap();
+
+        // Take instruction accounts:
+        // 0. taker [signer, writable]
+        // 1. maker [writable]
+        // 2. mint_a [readable]
+        // 3. mint_b [readable]
+        // 4. escrow_account [writable]
+        // 5. taker_ata_b [writable]
+        // 6. taker_ata_a [writable]
+        // 7. maker_ata_b [writable]
+        // 8. escrow_ata [writable, token vault]
+        // 9. system_program [readable]
+        // 10. token_program [readable]
+        let ix = Instruction {
+            program_id: program_id(),
+            accounts: vec![
+                AccountMeta::new(taker.pubkey(), true),
+                AccountMeta::new(s.maker.pubkey(), false),
+                AccountMeta::new(s.mint_a, false),
+                AccountMeta::new(s.mint_b, false),
+                AccountMeta::new(s.escrow, false),
+                AccountMeta::new(taker_ata_b, false),
+                AccountMeta::new(taker_ata_a, false),
+                AccountMeta::new(maker_ata_b, false),
+                AccountMeta::new(s.vault, false),
+                AccountMeta::new_readonly(system_program(), false),
+                AccountMeta::new_readonly(TOKEN_PROGRAM_ID, false),
+            ],
+            data: vec![1], // Take discriminator
+        };
+
+        let msg = Message::new(&[ix], Some(&taker.pubkey()));
+        let blockhash = s.svm.latest_blockhash();
+        let tx = Transaction::new(&[&taker], msg, blockhash);
+        let meta = s.svm.send_transaction(tx).expect("Take instruction failed");
+        println!("Take CU: {}", meta.compute_units_consumed);
+
+        // Verify taker got Token A
+        let taker_balance_a = read_token_balance(&s.svm, &taker_ata_a);
+        assert_eq!(taker_balance_a, s.amount_to_give);
+
+        // Verify maker got Token B
+        let maker_balance_b = read_token_balance(&s.svm, &maker_ata_b);
+        assert_eq!(maker_balance_b, s.amount_to_receive);
+
+        // Verify taker paid Token B
+        let taker_balance_b = read_token_balance(&s.svm, &taker_ata_b);
+        assert_eq!(taker_balance_b, 200_000_000 - s.amount_to_receive);
+
+        // Verify escrow and vault are closed
+        assert!(s.svm.get_account(&s.escrow).is_none());
+        assert!(s.svm.get_account(&s.vault).is_none());
+
+        println!("test_take passed");
     }
 }
