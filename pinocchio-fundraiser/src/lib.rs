@@ -33,7 +33,12 @@ pub fn process_instruction(
         FundraiserInstruction::Deposit => {
             instructions::process_contribute_instruction(accounts, data)
         }
-        _ => return Err(ProgramError::InvalidInstructionData),
+        FundraiserInstruction::Claim => {
+            instructions::process_claim_instruction(accounts)
+        }
+        FundraiserInstruction::Refund => {
+            instructions::process_refund_instruction(accounts)
+        }
     }
     // Ok(())
 }

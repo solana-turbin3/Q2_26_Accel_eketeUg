@@ -1,15 +1,19 @@
 pub mod contribute;
 pub mod initialize;
+pub mod claim;
+pub mod refund;
 
 pub use contribute::*;
 pub use initialize::*;
+pub use claim::*;
+pub use refund::*;
 use pinocchio::error::ProgramError;
 
 pub enum FundraiserInstruction {
     Initialize = 0,
     Deposit = 1,
-    // Cancel = 2,
-    // MakeV2 = 3,
+    Claim = 2,
+    Refund = 3,
 }
 
 impl TryFrom<&u8> for FundraiserInstruction {
@@ -19,8 +23,8 @@ impl TryFrom<&u8> for FundraiserInstruction {
         match value {
             0 => Ok(FundraiserInstruction::Initialize),
             1 => Ok(FundraiserInstruction::Deposit),
-            // 2 => Ok(FundraiserInstruction::Cancel),
-            // 3 => Ok(FundraiserInstruction::MakeV2),
+            2 => Ok(FundraiserInstruction::Claim),
+            3 => Ok(FundraiserInstruction::Refund),
             _ => Err(ProgramError::InvalidInstructionData),
         }
     }

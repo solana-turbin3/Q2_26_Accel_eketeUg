@@ -20,6 +20,8 @@ litesvm = "0.9.1"
 litesvm-token = "0.9.1"
 
 solana-instruction = "3.1.0"
+solana-clock = "3.0.0"
+solana-program-pack = "3.0.0"
 solana-keypair = "3.1.0"
 solana-native-token = "3.0.0"
 solana-pubkey = "4.1.0"

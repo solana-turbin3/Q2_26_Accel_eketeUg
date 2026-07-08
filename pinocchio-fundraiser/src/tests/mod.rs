@@ -1,5 +1,7 @@
 pub mod create_fundraiser;
 pub mod donate;
+pub mod claim;
+pub mod refund;
 
 #[cfg(test)]
 mod tests {
@@ -20,6 +22,8 @@ mod tests {
     use crate::tests::{
         create_fundraiser::create_fundraiser::create_fundraiser_function,
         donate::donate::donate_function,
+        claim::claim::claim_function,
+        refund::refund::refund_function,
     };
 
     const PROGRAM_ID: Pubkey = crate::ID;
@@ -121,5 +125,19 @@ mod tests {
         let (mut svm, reusable_state) = setup();
         create_fundraiser_function(&mut svm, &reusable_state).unwrap();
         donate_function(&mut svm, &reusable_state).unwrap();
+    }
+
+    #[test]
+    pub fn test_claim_instruction() {
+        let (mut svm, reusable_state) = setup();
+        create_fundraiser_function(&mut svm, &reusable_state).unwrap();
+        claim_function(&mut svm, &reusable_state).unwrap();
+    }
+
+    #[test]
+    pub fn test_refund_instruction() {
+        let (mut svm, reusable_state) = setup();
+        create_fundraiser_function(&mut svm, &reusable_state).unwrap();
+        refund_function(&mut svm, &reusable_state).unwrap();
     }
 }

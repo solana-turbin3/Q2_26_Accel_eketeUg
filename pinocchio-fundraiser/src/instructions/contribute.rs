@@ -26,10 +26,10 @@ pub fn process_contribute_instruction(accounts: &[AccountView], data: &[u8]) -> 
 
     assert!(contributor.is_signer(), "Contributor must be signer");
 
-    let fundraiser_data = fundraiser.try_borrow().unwrap();
+    let mut fundraiser_data = fundraiser.try_borrow_mut().unwrap();
 
     // ensure fundraiser exists and was created with this program_id
-    let fundraiser_as_state_account = bytemuck::from_bytes::<Fundraiser>(&*fundraiser_data);
+    let fundraiser_as_state_account = bytemuck::from_bytes_mut::<Fundraiser>(&mut fundraiser_data);
 
     assert!(!fundraiser.is_data_empty(), "Fundraiser must exist");
     assert!(
@@ -60,7 +60,7 @@ pub fn process_contribute_instruction(accounts: &[AccountView], data: &[u8]) -> 
             .unwrap();
 
         assert!(
-            contributor_ata_as_state.amount() > u64::from_le_bytes(parsed_data.amount),
+            contributor_ata_as_state.amount() >= u64::from_le_bytes(parsed_data.amount),
             "insufficient contributor balance"
         );
     }
@@ -140,6 +140,11 @@ pub fn process_contribute_instruction(accounts: &[AccountView], data: &[u8]) -> 
     let total_amount = current_amount + u64::from_le_bytes(parsed_data.amount);
 
     contributor_mutable.amount = total_amount.to_le_bytes();
+
+    let current_fundraiser_amount = u64::from_le_bytes(fundraiser_as_state_account.current_amount);
+    let total_fundraiser_amount = current_fundraiser_amount + u64::from_le_bytes(parsed_data.amount);
+
+    fundraiser_as_state_account.current_amount = total_fundraiser_amount.to_le_bytes();
 
     Ok(())
 }
